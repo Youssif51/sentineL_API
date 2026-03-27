@@ -1,0 +1,140 @@
+generator client {
+  provider = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum PlanType {
+  FREE
+  PRO
+}
+
+enum UserRole {
+  OWNER
+  MEMBER
+}
+
+enum AlertType {
+  PERCENTAGE_DROP
+  TARGET_PRICE
+}
+
+enum SecurityEventType {
+  FAILED_LOGIN
+  ACCOUNT_LOCKOUT
+  TOKEN_REUSE
+  CROSS_TENANT_ATTEMPT
+}
+
+model Tenant {
+  id                 String         @id @default(uuid())
+  name               String
+  plan               PlanType       @default(FREE)
+  paymob_customer_id String?
+  created_at         DateTime       @default(now())
+  updated_at         DateTime       @updatedAt
+  users              User[]
+  tracked_items      TrackedItem[]
+  subscriptions      Subscription[]
+}
+
+model User {
+  id              String          @id @default(uuid())
+  tenant_id       String
+  email           String          @unique
+  password_hash   String
+  role            UserRole        @default(OWNER)
+  failed_attempts Int             @default(0)
+  locked_until    DateTime?
+  created_at      DateTime        @default(now())
+  updated_at      DateTime        @updatedAt
+  tenant          Tenant          @relation(fields: [tenant_id], references: [id])
+  tracked_items   TrackedItem[]
+  security_events SecurityEvent[]
+}
+
+model Product {
+  id                   String        @id @default(uuid())
+  title                String
+  store                String
+  url                  String        @unique
+  last_price           Decimal?      @db.Decimal(10, 2)
+  in_stock             Boolean       @default(false)
+  last_scraped_at      DateTime?
+  is_fake_sale         Boolean       @default(false)
+  canonical_product_id String?
+  embedding            Unsupported("vector(1536)")?
+  created_at           DateTime      @default(now())
+  updated_at           DateTime      @updatedAt
+  canonical_product    Product?      @relation("canonical", fields: [canonical_product_id], references: [id])
+  variants             Product[]     @relation("canonical")
+  tracked_items        TrackedItem[]
+  price_history        PriceHistory[]
+}
+
+model TrackedItem {
+  id         String      @id @default(uuid())
+  user_id    String
+  product_id String
+  tenant_id  String
+  created_at DateTime    @default(now())
+  user       User        @relation(fields: [user_id], references: [id])
+  product    Product     @relation(fields: [product_id], references: [id])
+  tenant     Tenant      @relation(fields: [tenant_id], references: [id])
+  alert_rules AlertRule[]
+}
+
+model PriceHistory {
+  id         String   @id @default(uuid())
+  product_id String
+  price      Decimal  @db.Decimal(10, 2)
+  currency   String   @default("EGP")
+  in_stock   Boolean
+  scraped_at DateTime @default(now())
+  product    Product  @relation(fields: [product_id], references: [id])
+}
+
+model AlertRule {
+  id              String      @id @default(uuid())
+  tracked_item_id String
+  type            AlertType
+  threshold       Decimal     @db.Decimal(10, 2)
+  last_fired_at   DateTime?
+  created_at      DateTime    @default(now())
+  tracked_item    TrackedItem @relation(fields: [tracked_item_id], references: [id])
+  alert_logs      AlertLog[]
+}
+
+model AlertLog {
+  id            String    @id @default(uuid())
+  alert_rule_id String
+  old_price     Decimal   @db.Decimal(10, 2)
+  new_price     Decimal   @db.Decimal(10, 2)
+  sent_at       DateTime  @default(now())
+  alert_rule    AlertRule @relation(fields: [alert_rule_id], references: [id])
+}
+
+model Subscription {
+  id                 String   @id @default(uuid())
+  tenant_id          String
+  paymob_order_id    String   @unique
+  status             String
+  current_period_end DateTime
+  created_at         DateTime @default(now())
+  updated_at         DateTime @updatedAt
+  tenant             Tenant   @relation(fields: [tenant_id], references: [id])
+}
+
+model SecurityEvent {
+  id         String            @id @default(uuid())
+  user_id    String?
+  ip         String
+  event_type SecurityEventType
+  user_agent String?
+  created_at DateTime          @default(now())
+  user       User?             @relation(fields: [user_id], references: [id])
+}
