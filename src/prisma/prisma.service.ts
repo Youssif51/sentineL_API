@@ -9,6 +9,7 @@ export const tenantStorage = new AsyncLocalStorage<TenantStore>();
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.$connect();
+    console.log("db connected sucssfuly")
   }
 
   async onModuleDestroy() {

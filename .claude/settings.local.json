@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(docker-compose down:*)",
+      "Bash(docker-compose up:*)",
+      "Bash(docker exec:*)",
+      "Bash(npx prisma:*)",
+      "Bash(grep -v \"^$\")",
+      "Bash(docker restart:*)",
+      "Bash(netstat -ano)",
+      "Bash(node -e \"const net = require\\(''net''\\); const s = net.createConnection\\(5432, ''127.0.0.1'', \\(\\) => { console.log\\(''CONNECTED''\\); s.destroy\\(\\); }\\); s.on\\(''error'', e => console.log\\(''ERROR:'', e.message\\)\\);\")",
+      "Bash(tasklist /FI \"PID eq 6460\")",
+      "Bash(tasklist /FI \"PID eq 5708\")",
+      "Bash(powershell -Command \"Get-Process -Id 6460, 5708 | Select-Object Id, ProcessName, Path\")",
+      "Bash(ls \"D:\\\\BackEnd projects\\\\price_Tracker_App\\\\prisma\\\\migrations\"\" 2>/dev/null || echo \"No migrations folder \")"
+    ]
+  }
+}
