@@ -1,13 +1,19 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { ThrottlerModule } from '@nestjs/throttler';
+import { ConfigModule , ConfigService } from '@nestjs/config';
+import { ThrottlerModule , ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
+import { APP_GUARD } from '@nestjs/core';
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bull';
+import { BullBoardModule } from '@bull-board/nestjs';
+import { ExpressAdapter } from '@bull-board/express';
 import * as Joi from 'joi';
 import { HealthModule } from './health/health.module';
 import { RedisModule } from './redis/redis.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AppService } from "./app.service"
+
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -37,6 +43,7 @@ import { AppService } from "./app.service"
         redis: {
           host: process.env.REDIS_HOST,
           port: parseInt(process.env.REDIS_PORT ?? '6379'),
+          password:process.env.REDIS_PASSWORD ?? "password"
         },
         defaultJobOptions: {
           attempts: 4,
@@ -46,10 +53,38 @@ import { AppService } from "./app.service"
         },
       }),
     }),
+    BullBoardModule.forRoot({
+      route: '/admin/queues',
+      adapter: ExpressAdapter,
+    }),
+    ThrottlerModule.forRootAsync({
+      inject: [ConfigService],
+      useFactory: (config: ConfigService) => ({
+        throttlers: [
+          {
+            name: 'global',
+            ttl: 60000,    // 1 minute window
+            limit: 100, // 100 requests per user
+          },
+        ],
+        storage: new ThrottlerStorageRedisService({
+          host: config.get('REDIS_HOST'),
+          port: config.get<number>('REDIS_PORT'),
+          password: config.get<string>('REDIS_PASSWORD'),
+        }),
+      }),
+    }),
     HealthModule,
     RedisModule,
     
   ],
-  providers:[PrismaService , AppService]
+  providers:[
+    PrismaService ,
+     AppService , 
+     {
+    provide: APP_GUARD,
+    useClass: ThrottlerGuard,
+     },
+]
 })
 export class AppModule {}
