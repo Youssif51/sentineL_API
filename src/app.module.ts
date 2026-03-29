@@ -3,6 +3,7 @@ import { ConfigModule , ConfigService } from '@nestjs/config';
 import { ThrottlerModule , ThrottlerGuard } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from 'nestjs-throttler-storage-redis';
 import { APP_GUARD } from '@nestjs/core';
+import { AllExceptionsFilter } from './common/filters/throttler-exception.filter'
 import { ScheduleModule } from '@nestjs/schedule';
 import { BullModule } from '@nestjs/bull';
 import { BullBoardModule } from '@bull-board/nestjs';
@@ -12,7 +13,7 @@ import { HealthModule } from './health/health.module';
 import { RedisModule } from './redis/redis.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AppService } from "./app.service"
-
+import { AuthModule } from "./auth/auth.module"
 
 @Module({
   imports: [
@@ -76,14 +77,14 @@ import { AppService } from "./app.service"
     }),
     HealthModule,
     RedisModule,
-    
+    AuthModule
   ],
   providers:[
     PrismaService ,
      AppService , 
      {
     provide: APP_GUARD,
-    useClass: ThrottlerGuard,
+    useClass: AllExceptionsFilter,
      },
 ]
 })
