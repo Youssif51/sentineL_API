@@ -14,7 +14,7 @@ import { RedisModule } from './redis/redis.module';
 import { PrismaService } from './prisma/prisma.service';
 import { AppService } from "./app.service"
 import { AuthModule } from "./auth/auth.module"
-
+import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -85,6 +85,10 @@ import { AuthModule } from "./auth/auth.module"
      {
     provide: APP_GUARD,
     useClass: AllExceptionsFilter,
+     },
+     {
+      provide: APP_GUARD,
+      useClass: JwtAuthGuard,
      },
 ]
 })

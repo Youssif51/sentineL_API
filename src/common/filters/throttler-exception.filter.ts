@@ -3,7 +3,7 @@ import { ExceptionFilter, Catch, ArgumentsHost, HttpStatus } from '@nestjs/commo
 import { Response } from 'express';
 
 @Catch()
-export class AllExceptionsFilter implements ExceptionFilter { // غيرنا الاسم ليكون عاماً
+export class AllExceptionsFilter implements ExceptionFilter { 
   catch(exception: any, host: ArgumentsHost): void {
     const response = host.switchToHttp().getResponse<Response>();
   

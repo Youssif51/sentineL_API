@@ -1,9 +1,7 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { AsyncLocalStorage } from 'async_hooks';
-
-interface TenantStore { tenantId: string }
-export const tenantStorage = new AsyncLocalStorage<TenantStore>();
+import { tenantStorage } from '../tenants/tenant.context';
 
 @Injectable()
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {

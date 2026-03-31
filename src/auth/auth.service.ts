@@ -117,7 +117,7 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
         throw new UnauthorizedException('Token reuse detected — all sessions invalidated');
       }
   
-      const ttl = (payload.exp ?? 0) - Math.floor(Date.now() / 1000);
+      const ttl = (payload.exp ?? 0) - Math.floor(Date.now() / 1000); // we divide by 1000 to get the seconds cuz node save in milliseconds
       await this.redis.set(`rt:blacklist:${tokenHash}`, '1', 'EX', Math.max(ttl, 1));
   
       const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });

@@ -8,7 +8,9 @@ import { PrismaModule } from "../prisma/prisma.module"
 @Module({
   imports: [
     PassportModule,
-    JwtModule.register({}),
+    JwtModule.register({
+      global: true,
+    }),
     PrismaModule,
   ],
   providers: [AuthService, JwtStrategy],
