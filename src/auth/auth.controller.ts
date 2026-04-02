@@ -8,7 +8,8 @@ import {
   import { LoginDto } from '././dto/login.dto';
   import { Public } from '../common/decorators/public.decorator';
   import { Throttle } from '@nestjs/throttler';
-  
+  import { extractIp } from '../common/helpers/ip.helper';
+
   const COOKIE_OPTIONS = {
     httpOnly: true,
     secure: process.env.NODE_ENV === 'production',
@@ -43,8 +44,9 @@ import {
       @Req() req: Request,
       @Res({ passthrough: true }) res: Response,
     ) {
-      const ip = (req.headers['x-forwarded-for'] as string)?.split(',')[0] ?? req.ip ?? 'unknown';
-      const { accessToken, refreshToken } = await this.auth.login(dto, ip);
+      const ip = extractIp(req);
+      const userAgent = req.headers['user-agent'] as string;
+      const { accessToken, refreshToken } = await this.auth.login(dto, ip, userAgent);
       res.cookie('refresh_token', refreshToken, COOKIE_OPTIONS);
       return { message: 'Welcome to your Price Tracker profile!', accessToken };
     }
@@ -56,7 +58,9 @@ import {
     async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
       const token = req.cookies?.refresh_token as string | undefined;
       if (!token) throw new Error('No refresh token');
-      const { accessToken, refreshToken } = await this.auth.refreshTokens(token);
+      const ip = extractIp(req);
+      const userAgent = req.headers['user-agent'] as string;
+      const { accessToken, refreshToken } = await this.auth.refreshTokens(token, ip, userAgent);
       res.cookie('refresh_token', refreshToken, COOKIE_OPTIONS);
       return { accessToken };
     }

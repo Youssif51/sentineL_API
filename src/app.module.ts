@@ -15,6 +15,7 @@ import { PrismaService } from './prisma/prisma.service';
 import { AppService } from "./app.service"
 import { AuthModule } from "./auth/auth.module"
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
+import { SecurityModule } from './security/security.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -77,7 +78,8 @@ import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
     }),
     HealthModule,
     RedisModule,
-    AuthModule
+    AuthModule,
+    SecurityModule,
   ],
   providers:[
     PrismaService ,

@@ -16,8 +16,10 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
   import { RegisterDto } from '././dto/register.dto';
   import { LoginDto } from '././dto/login.dto';
   import { JwtPayload } from '././strategies/jwt-payload.interface';
-  import { User } from '@prisma/client';
+  import { User, SecurityEventType } from '@prisma/client';
+  import { SecurityEventService } from '../security/security-event.service';
   
+
   const BCRYPT_ROUNDS = 12;
   const MAX_FAILED_ATTEMPTS = 5;
   const LOCKOUT_MINUTES = 15;
@@ -29,6 +31,7 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
       private jwt: JwtService,
       private config: ConfigService,
       @Inject(REDIS_CLIENT) private redis: Redis,
+      private securityEvents: SecurityEventService,
     ) {}
   
     async register(dto: RegisterDto) {
@@ -59,7 +62,7 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
       return this.generateTokens(user);
     }
   
-    async login(dto: LoginDto, ip: string) { // ( adada498592 , 10.0.0.1)
+    async login(dto: LoginDto, ip: string, userAgent: string) { // ( adada498592 , 10.0.0.1)
       const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
   
       // Check DB lockout
@@ -73,13 +76,25 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
       const valid = user && (await bcrypt.compare(dto.password, user.password_hash)); // true
   
       if (!valid) {
+        this.securityEvents.log({
+          event_type: SecurityEventType.FAILED_LOGIN,
+          user_id: user?.id,
+          ip: ip,
+          user_agent: userAgent,
+        });
         if (user) {
-          const attempts = await this.incrementFailedAttempts(ip, user.id);
+          const attempts = await this.incrementFailedAttempts(ip, user.id, userAgent);
           if (attempts >= MAX_FAILED_ATTEMPTS) {
             const lockedUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60_000);
             await this.prisma.user.update({
               where: { id: user.id },
               data: { locked_until: lockedUntil, failed_attempts: attempts },
+            });
+            this.securityEvents.log({
+              event_type: SecurityEventType.ACCOUNT_LOCKOUT,
+              user_id: user?.id,
+              ip: ip,
+              user_agent: userAgent,
             });
             throw new HttpException(
               { message: 'Account locked due to too many failed attempts', unlocksAt: lockedUntil },
@@ -100,7 +115,7 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
       return this.generateTokens(user);
     }
   
-    async refreshTokens(oldRefreshToken: string): Promise<{ accessToken: string; refreshToken: string }> {
+    async refreshTokens(oldRefreshToken: string, ip: string, userAgent: string): Promise<{ accessToken: string; refreshToken: string }> {
       let payload: JwtPayload;
       try {
         payload = this.jwt.verify<JwtPayload>(oldRefreshToken, {
@@ -113,6 +128,12 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
       const tokenHash = this.hashToken(oldRefreshToken);
       const blacklisted = await this.redis.get(`rt:blacklist:${tokenHash}`);
       if (blacklisted) {
+        this.securityEvents.log({
+          event_type: SecurityEventType.TOKEN_REUSE,
+          user_id: payload.sub,
+          ip: ip,
+          user_agent: userAgent,
+        });
         await this.redis.set(`sessions:killed:${payload.sub}`, Date.now().toString(), 'EX', 7 * 24 * 3600);
         throw new UnauthorizedException('Token reuse detected — all sessions invalidated');
       }
@@ -156,12 +177,14 @@ import { REDIS_CLIENT } from '.././redis/redis.module';
       return createHash('sha256').update(token).digest('hex');
     }
   
-    private async incrementFailedAttempts(ip: string, userId: string): Promise<number> {
+    private async incrementFailedAttempts(ip: string, userId: string, userAgent: string): Promise<number> {
       const pipeline = this.redis.pipeline();
       pipeline.incr(`bf:ip:${ip}`);
       pipeline.expire(`bf:ip:${ip}`, LOCKOUT_MINUTES * 60);
       pipeline.incr(`bf:account:${userId}`);
       pipeline.expire(`bf:account:${userId}`, LOCKOUT_MINUTES * 60);
+      pipeline.incr(`bf:user_agent:${userAgent}`);
+      pipeline.expire(`bf:user_agent:${userAgent}`, LOCKOUT_MINUTES * 60);
       const results = await pipeline.exec();
       const ipCount = (results?.[0]?.[1] as number) ?? 0;
       const accCount = (results?.[2]?.[1] as number) ?? 0;
