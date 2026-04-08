@@ -34,7 +34,8 @@ export class ScraperRegistryService implements OnModuleInit {
     );
   }
 
-  resolve(url: string): IScraperAdapter { // resolve the adapter from the url like SigmaAdapter like "sigma-computer.com": SigmaAdapter()
+  resolve(url: string): IScraperAdapter {
+    // resolve the adapter from the url like SigmaAdapter like "sigma-computer.com": SigmaAdapter()
     const domain = this.parseDomain(url); // parse the domain from the url like sigma-computer.com
     const adapter = this.registry.get(domain); // get the adapter from the registry like SigmaAdapter with all the methods
     if (!adapter) {

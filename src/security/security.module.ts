@@ -1,4 +1,4 @@
-import { Module , Global } from '@nestjs/common';
+import { Module, Global } from '@nestjs/common';
 import { SecurityEventService } from './security-event.service';
 
 @Global()

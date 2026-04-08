@@ -10,13 +10,13 @@ import Redis from 'ioredis';
 @Injectable()
 export class JwtStrategy extends PassportStrategy(Strategy) {
   constructor(
-    config: ConfigService, 
+    config: ConfigService,
     private prisma: PrismaService,
     @Inject(REDIS_CLIENT) private redis: Redis,
   ) {
     super({
       jwtFromRequest: ExtractJwt.fromAuthHeaderAsBearerToken(),
-      secretOrKey: config.get<string>('JWT_SECRET') ,
+      secretOrKey: config.get<string>('JWT_SECRET') ?? '',
     });
   }
 
@@ -30,6 +30,3 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     return user;
   }
 }
-
-
-  

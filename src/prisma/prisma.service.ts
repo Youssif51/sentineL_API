@@ -7,7 +7,7 @@ import { tenantStorage } from '../tenants/tenant.context';
 export class PrismaService extends PrismaClient implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.$connect();
-    console.log("db connected sucssfuly")
+    console.log('db connected sucssfuly');
   }
 
   async onModuleDestroy() {
