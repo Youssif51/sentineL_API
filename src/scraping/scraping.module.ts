@@ -32,6 +32,6 @@ import { DomainRateLimiterService } from './anti-bot/domain-rate-limiter.service
     UaRotationService,
     DomainRateLimiterService,
   ],
-  exports: [ScraperService],
+  exports: [ScraperService, ScraperRegistryService],
 })
 export class ScrapingModule {}

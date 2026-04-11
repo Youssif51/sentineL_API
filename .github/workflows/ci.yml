@@ -54,12 +54,12 @@ jobs:
       - name: Run Prisma migrations (test DB)
         run: npx prisma migrate deploy
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/seerPrice_test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/seerPrice_test
 
       - name: Run tests
         run: npm run test
         env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/seerPrice_test
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5433/seerPrice_test
           REDIS_HOST: localhost
           REDIS_PORT: 6379
           JWT_ACCESS_SECRET: test-access-secret
