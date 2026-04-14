@@ -14,9 +14,10 @@ import { ElbadrAdapter } from './adapters/el-badr.adapter';
 import { KimoAdapter } from './adapters/kimo.adapter';
 import { UaRotationService } from './anti-bot/ua-rotation.service';
 import { DomainRateLimiterService } from './anti-bot/domain-rate-limiter.service';
-
+import { PriceHistoryModule } from '../price-history/price-history.module';
+import { ProxyService } from './anti-bot/proxy.service';
 @Module({
-  imports: [BullModule.registerQueue({ name: SCRAPE_QUEUE })],
+  imports: [BullModule.registerQueue({ name: SCRAPE_QUEUE }), PriceHistoryModule],
   controllers: [ScraperHealthController],
   providers: [
     ScrapeProcessor,
@@ -31,7 +32,8 @@ import { DomainRateLimiterService } from './anti-bot/domain-rate-limiter.service
     GamesWorldAdapter,
     UaRotationService,
     DomainRateLimiterService,
+    ProxyService,
   ],
-  exports: [ScraperService, ScraperRegistryService],
+  exports: [ScraperService, ScraperRegistryService, ProxyService],
 })
 export class ScrapingModule {}

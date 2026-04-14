@@ -4,18 +4,23 @@ import { BaseScraper } from './base.scraper';
 import { ScrapedProduct } from './scraper-adapter.interface';
 import { UaRotationService } from '../anti-bot/ua-rotation.service';
 import { DomainRateLimiterService } from '../anti-bot/domain-rate-limiter.service';
-
+import { ProxyService } from '../anti-bot/proxy.service';
+import { AxiosProxyConfig } from 'axios';
 @Injectable()
 export class GamesWorldAdapter extends BaseScraper {
   readonly storeDomain = 'gamesworldegypt.com';
   private readonly healthCheckUrl = 'https://www.gamesworldegypt.com/';
 
-  constructor(ua: UaRotationService, rl: DomainRateLimiterService) {
-    super(ua, rl);
+  constructor(ua: UaRotationService, rl: DomainRateLimiterService, proxyService: ProxyService) {
+    super(ua, rl, proxyService);
   }
 
-  protected async scrape(url: string, headers: Record<string, string>): Promise<ScrapedProduct> {
-    const { data } = await this.http.get<string>(url, { headers });
+  protected async scrape(
+    url: string,
+    headers: Record<string, string>,
+    proxy: AxiosProxyConfig,
+  ): Promise<ScrapedProduct> {
+    const { data } = await this.http.get<string>(url, { headers, proxy });
     const $ = cheerio.load(data);
 
     const title =

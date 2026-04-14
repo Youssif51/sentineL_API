@@ -3,7 +3,6 @@ import {
   UnauthorizedException,
   ConflictException,
   HttpException,
-  HttpStatus,
   Inject,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';

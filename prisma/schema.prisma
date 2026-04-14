@@ -105,6 +105,7 @@ model AlertRule {
   type            AlertType
   threshold       Decimal     @db.Decimal(10, 2)
   last_fired_at   DateTime?
+  last_fired_price Float?
   created_at      DateTime    @default(now())
   tracked_item    TrackedItem @relation(fields: [tracked_item_id], references: [id])
   alert_logs      AlertLog[]

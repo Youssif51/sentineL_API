@@ -1,6 +1,6 @@
 import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
-import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ThrottlerModule } from '@nestjs/throttler';
 import { ThrottlerStorageRedisService } from '@nest-lab/throttler-storage-redis';
 import { APP_FILTER, APP_GUARD } from '@nestjs/core';
 import { AllExceptionsFilter } from './common/filters/throttler-exception.filter';
@@ -17,6 +17,9 @@ import { AuthModule } from './auth/auth.module';
 import { JwtAuthGuard } from './common/guards/jwt-auth.guard';
 import { SecurityModule } from './security/security.module';
 import { ScrapingModule } from './scraping/scraping.module';
+import { PriceHistoryModule } from './price-history/price-history.module';
+import { CacheModule } from './cache/cache.module';
+import { AlertRulesModule } from './alerts/alerts.module';
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -83,6 +86,9 @@ import { ScrapingModule } from './scraping/scraping.module';
     AuthModule,
     SecurityModule,
     ScrapingModule,
+    PriceHistoryModule,
+    CacheModule,
+    AlertRulesModule,
   ],
   providers: [
     AppService,

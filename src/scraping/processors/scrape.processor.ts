@@ -4,13 +4,15 @@ import { Job } from 'bullmq';
 import { SCRAPE_QUEUE } from '../../queue/queue.constants';
 import { ScrapeJobData } from './scrape-job.interface';
 import { ScraperRegistryService } from '../registry/scraper-registry.service';
-
+import { PriceHistoryService } from '../../price-history/price-history.service';
 @Processor(SCRAPE_QUEUE, { concurrency: 3 })
 export class ScrapeProcessor extends WorkerHost {
   private readonly logger = new Logger(ScrapeProcessor.name);
 
-  // 1. شيلنا الـ RateLimiter من هنا، الكلاس ده رجع خفيف تاني
-  constructor(private registry: ScraperRegistryService) {
+  constructor(
+    private registry: ScraperRegistryService,
+    private priceHistory: PriceHistoryService,
+  ) {
     super();
   }
 
@@ -20,12 +22,10 @@ export class ScrapeProcessor extends WorkerHost {
 
     const adapter = this.registry.resolve(url);
 
-    // 2. السحر هنا! بننادي الدالة المحمية، وهي هتعمل كل الشغل الشاق من جواها
     const result = await adapter.scrapeWithProtection(url);
 
     this.logger.log(`Scraped ${store}: ${result.price} EGP | inStock: ${result.inStock}`);
 
-    // PriceHistoryService.record() will go here later
-    job.data.productId;
+    await this.priceHistory.record(productId, result);
   }
 }

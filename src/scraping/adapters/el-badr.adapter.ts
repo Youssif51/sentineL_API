@@ -4,19 +4,24 @@ import { BaseScraper } from './base.scraper';
 import { ScrapedProduct } from './scraper-adapter.interface';
 import { UaRotationService } from '../anti-bot/ua-rotation.service';
 import { DomainRateLimiterService } from '../anti-bot/domain-rate-limiter.service';
-
+import { ProxyService } from '../anti-bot/proxy.service';
+import { AxiosProxyConfig } from 'axios';
 @Injectable()
 export class ElbadrAdapter extends BaseScraper {
   readonly storeDomain = 'elbadrgroupeg.store';
   private readonly healthCheckUrl =
     'https://elbadrgroupeg.store/msi-mpg-z890-edge-ti-wifi-lga-1851-ddr5-atx-motherboard';
 
-  constructor(ua: UaRotationService, rl: DomainRateLimiterService) {
-    super(ua, rl);
+  constructor(ua: UaRotationService, rl: DomainRateLimiterService, proxyService: ProxyService) {
+    super(ua, rl, proxyService);
   }
 
-  protected async scrape(url: string, headers: Record<string, string>): Promise<ScrapedProduct> {
-    const { data } = await this.http.get<string>(url, { headers });
+  protected async scrape(
+    url: string,
+    headers: Record<string, string>,
+    proxy: AxiosProxyConfig,
+  ): Promise<ScrapedProduct> {
+    const { data } = await this.http.get<string>(url, { headers, proxy });
     const $ = cheerio.load(data);
 
     const title =
