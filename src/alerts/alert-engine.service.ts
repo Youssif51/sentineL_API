@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-//import { EmailService } from '../notifications/email.service';
+import { EmailService } from '../notifications/email.service';
 import { AlertRule, AlertType, Product, TrackedItem, User } from '@prisma/client';
-
+import { InjectQueue } from '@nestjs/bullmq';
+import { Queue } from 'bullmq';
 type RuleWithRelations = AlertRule & {
   tracked_item: TrackedItem & { user: User; product: Product };
 };
@@ -13,7 +14,8 @@ export class AlertEngineService {
 
   constructor(
     private prisma: PrismaService,
-    //private emailService: EmailService,
+    private emailService: EmailService,
+    @InjectQueue('mail-queue') private readonly mailQueue: Queue,
   ) {}
 
   async check(productId: string, oldPrice: number | null, newPrice: number): Promise<void> {
@@ -90,15 +92,26 @@ export class AlertEngineService {
       data: { alert_rule_id: rule.id, old_price: oldPrice, new_price: newPrice },
     });
 
-    /* await this.emailService.sendPriceAlert({
-      to: rule.tracked_item.user.email,
-      productTitle: rule.tracked_item.product.title,
-      oldPrice,
-      newPrice,
-      dropPercent: dropPct,
-      store: rule.tracked_item.product.store,
-      productUrl: rule.tracked_item.product.url,
-    }); */
+    await this.mailQueue.add(
+      'send-price-alert',
+      {
+        to: rule.tracked_item.user.email,
+        productTitle: rule.tracked_item.product.title,
+        oldPrice,
+        newPrice,
+        dropPercent: dropPct,
+        store: rule.tracked_item.product.store,
+        productUrl: rule.tracked_item.product.url,
+      },
+      {
+        attempts: 5,
+        backoff: {
+          type: 'exponential',
+          delay: 5000,
+        },
+        removeOnComplete: true,
+      },
+    );
 
     this.logger.log(
       `Alert fired: "${rule.tracked_item.product.title}" — ${oldPrice} → ${newPrice} EGP (-${dropPct}%)`,
