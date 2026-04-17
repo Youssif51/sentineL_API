@@ -4,11 +4,13 @@ import {
   ConflictException,
   HttpException,
   Inject,
+  BadRequestException,
+  InternalServerErrorException,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { createHash } from 'crypto';
+import { createHash, randomBytes } from 'crypto';
 import { PrismaService } from '.././prisma/prisma.service';
 import { REDIS_CLIENT } from '.././redis/redis.module';
 import Redis from 'ioredis';
@@ -17,10 +19,18 @@ import { LoginDto } from '././dto/login.dto';
 import { JwtPayload } from '././strategies/jwt-payload.interface';
 import { User, SecurityEventType } from '@prisma/client';
 import { SecurityEventService } from '../security/security-event.service';
+import { ReferralService } from '../referrals/referrals.service';
 
 const BCRYPT_ROUNDS = 12;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
+const REFERRAL_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+
+interface AuthTokens {
+  accessToken: string;
+  refreshToken: string;
+  referralCode: string;
+}
 
 @Injectable()
 export class AuthService {
@@ -30,24 +40,36 @@ export class AuthService {
     private config: ConfigService,
     @Inject(REDIS_CLIENT) private redis: Redis,
     private securityEvents: SecurityEventService,
+    private referrals: ReferralService,
   ) {}
 
   async register(dto: RegisterDto) {
-    console.log('Inside Register Service');
     const exists = await this.prisma.user.findUnique({ where: { email: dto.email } });
     if (exists) throw new ConflictException('Email already registered');
 
     const passwordHash = await bcrypt.hash(dto.password, BCRYPT_ROUNDS);
+    const normalizedReferralCode = this.referrals.normalizeReferralCode(dto.referralCode);
+    const referrer = normalizedReferralCode
+      ? await this.referrals.assertValidReferralCode(normalizedReferralCode)
+      : null;
+
+    if (referrer?.email === dto.email) {
+      throw new BadRequestException('You cannot use your own referral code');
+    }
 
     const { user } = await this.prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: { name: dto.email },
       });
 
+      const referralCode = await this.generateUniqueReferralCode();
+
       const newUser = await tx.user.create({
         data: {
           email: dto.email,
           password_hash: passwordHash,
+          referral_code: referralCode,
+          referred_by_user_id: referrer?.id ?? null,
           tenant_id: tenant.id,
           role: 'OWNER',
         },
@@ -60,10 +82,8 @@ export class AuthService {
   }
 
   async login(dto: LoginDto, ip: string, userAgent: string) {
-    // ( adada498592 , 10.0.0.1)
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
 
-    // Check DB lockout
     if (user?.locked_until && new Date() < user.locked_until) {
       throw new HttpException(
         { message: 'Account is temporarily locked', unlocksAt: user.locked_until },
@@ -71,7 +91,7 @@ export class AuthService {
       );
     }
 
-    const valid = user && (await bcrypt.compare(dto.password, user.password_hash)); // true
+    const valid = user && (await bcrypt.compare(dto.password, user.password_hash));
 
     if (!valid) {
       this.securityEvents.log({
@@ -103,7 +123,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Successful login — clear counters
     await this.clearFailedAttempts(ip, user.id);
     await this.prisma.user.update({
       where: { id: user.id },
@@ -117,7 +136,7 @@ export class AuthService {
     oldRefreshToken: string,
     ip: string,
     userAgent: string,
-  ): Promise<{ accessToken: string; refreshToken: string }> {
+  ): Promise<AuthTokens> {
     let payload: JwtPayload;
     try {
       payload = this.jwt.verify<JwtPayload>(oldRefreshToken, {
@@ -142,10 +161,10 @@ export class AuthService {
         'EX',
         7 * 24 * 3600,
       );
-      throw new UnauthorizedException('Token reuse detected — all sessions invalidated');
+      throw new UnauthorizedException('Token reuse detected - all sessions invalidated');
     }
 
-    const ttl = (payload.exp ?? 0) - Math.floor(Date.now() / 1000); // we divide by 1000 to get the seconds cuz node save in milliseconds
+    const ttl = (payload.exp ?? 0) - Math.floor(Date.now() / 1000);
     await this.redis.set(`rt:blacklist:${tokenHash}`, '1', 'EX', Math.max(ttl, 1));
 
     const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
@@ -159,7 +178,7 @@ export class AuthService {
     await this.redis.set(`rt:blacklist:${hash}`, '1', 'EX', 7 * 24 * 3600);
   }
 
-  generateTokens(user: User) {
+  generateTokens(user: User): AuthTokens {
     const payload: JwtPayload = {
       sub: user.id,
       email: user.email,
@@ -177,7 +196,11 @@ export class AuthService {
       expiresIn: '7d',
     });
 
-    return { accessToken, refreshToken };
+    return {
+      accessToken,
+      refreshToken,
+      referralCode: user.referral_code,
+    };
   }
 
   hashToken(token: string): string {
@@ -204,5 +227,25 @@ export class AuthService {
 
   private async clearFailedAttempts(ip: string, userId: string): Promise<void> {
     await this.redis.del(`bf:ip:${ip}`, `bf:account:${userId}`);
+  }
+
+  private async generateUniqueReferralCode(length = 10): Promise<string> {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      const bytes = randomBytes(length);
+      const referralCode = Array.from(bytes, (byte) =>
+        REFERRAL_CODE_ALPHABET[byte % REFERRAL_CODE_ALPHABET.length],
+      ).join('');
+
+      const existingUser = await this.prisma.user.findUnique({
+        where: { referral_code: referralCode },
+        select: { id: true },
+      });
+
+      if (!existingUser) {
+        return referralCode;
+      }
+    }
+
+    throw new InternalServerErrorException('Unable to generate a unique referral code');
   }
 }

@@ -1,0 +1,2 @@
+export const FREE_TRACKED_ITEMS_LIMIT = 5;
+export const MAX_BONUS_TRACKING_SLOTS = 3;

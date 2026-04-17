@@ -20,6 +20,9 @@ import { ScrapingModule } from './scraping/scraping.module';
 import { PriceHistoryModule } from './price-history/price-history.module';
 import { CacheModule } from './cache/cache.module';
 import { AlertRulesModule } from './alerts/alerts.module';
+import { ReferralsModule } from './referrals/referrals.module';
+import { TrackedItemsModule } from './tracking/tracking.module';
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -27,20 +30,7 @@ import { AlertRulesModule } from './alerts/alerts.module';
       validationSchema: Joi.object({
         NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
         PORT: Joi.number().default(3000),
-        // DATABASE_URL: Joi.string().required(),
-        // REDIS_HOST: Joi.string().required(),
         REDIS_PORT: Joi.number().default(6379),
-        //JWT_ACCESS_SECRET: Joi.string().required(),
-        //JWT_REFRESH_SECRET: Joi.string().required(),
-        //SMTP_HOST: Joi.string().required(),
-        //SMTP_USER: Joi.string().required(),
-        //SMTP_PASS: Joi.string().required(),
-        //SMTP_FROM: Joi.string().required(),
-        //PAYMOB_API_KEY: Joi.string().required(),
-        //PAYMOB_INTEGRATION_ID: Joi.number().required(),
-        //PAYMOB_IFRAME_ID: Joi.number().required(),
-        //PAYMOB_HMAC_SECRET: Joi.string().required(),
-        //FRONTEND_URL: Joi.string().default('http://localhost:3001'),
       }),
     }),
     ScheduleModule.forRoot(),
@@ -69,8 +59,8 @@ import { AlertRulesModule } from './alerts/alerts.module';
         throttlers: [
           {
             name: 'global',
-            ttl: 60000, // 1 minute window
-            limit: 100, // 100 requests per user
+            ttl: 60000,
+            limit: 100,
           },
         ],
         storage: new ThrottlerStorageRedisService({
@@ -85,10 +75,12 @@ import { AlertRulesModule } from './alerts/alerts.module';
     RedisModule,
     AuthModule,
     SecurityModule,
+    ReferralsModule,
     ScrapingModule,
     PriceHistoryModule,
     CacheModule,
     AlertRulesModule,
+    TrackedItemsModule,
   ],
   providers: [
     AppService,

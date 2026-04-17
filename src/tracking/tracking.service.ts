@@ -1,17 +1,10 @@
-import { Injectable, NotFoundException, HttpException, HttpStatus } from '@nestjs/common';
+import { HttpException, HttpStatus, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScraperRegistryService } from '../scraping/registry/scraper-registry.service';
 import { ScraperService } from '../scraping/processors/scraper.service';
 import { CreateTrackedItemDto } from './dto/create-tracked-item.dto';
-import { CacheService } from '../cache/cache.service'; // 👈 1. استيراد الكاش
-
-const FREE_LIMIT = 5;
-
-// عشان نعّرف الـ TypeScript بشكل الداتا اللي هتتخزن في الكاش
-interface CachedPlanInfo {
-  plan: string;
-  count: number;
-}
+import { FREE_TRACKED_ITEMS_LIMIT } from '../plans/plan.constants';
+import { ReferralService } from '../referrals/referrals.service';
 
 @Injectable()
 export class TrackedItemsService {
@@ -19,66 +12,57 @@ export class TrackedItemsService {
     private prisma: PrismaService,
     private registry: ScraperRegistryService,
     private scraperService: ScraperService,
-    private cache: CacheService, // 👈 2. حقن الكاش
+    private referrals: ReferralService,
   ) {}
 
   async create(dto: CreateTrackedItemDto, userId: string, tenantId: string) {
     const store = this.registry.detectStore(dto.url);
 
-    const planKey = this.cache.getTenantPlanKey(tenantId);
+    const [tenant, trackedItemsCount] = await Promise.all([
+      this.prisma.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: {
+          plan: true,
+          bonus_tracking_slots: true,
+        },
+      }),
+      this.prisma.trackedItem.count({ where: { tenant_id: tenantId } }),
+    ]);
 
-    // 3. اسأل التلاجة الأول
-    let tenantInfo = await this.cache.get<CachedPlanInfo>(planKey);
+    const trackingLimit =
+      tenant.plan === 'PRO' ? Number.POSITIVE_INFINITY : FREE_TRACKED_ITEMS_LIMIT + tenant.bonus_tracking_slots;
 
-    // 4. لو التلاجة فاضية (Cache Miss)
-    if (!tenantInfo) {
-      // نروح الداتابيز (المخزن)
-      const tenant = await this.prisma.tenant.findUniqueOrThrow({ where: { id: tenantId } });
-      const count = await this.prisma.trackedItem.count({ where: { tenant_id: tenantId } });
-
-      tenantInfo = { plan: tenant.plan, count: count };
-
-      // ونحط الداتا في التلاجة لمدة دقيقة (حسب الـ TTL اللي إنت ظابطه)
-      await this.cache.set(planKey, tenantInfo, this.cache.ttl.TENANT_PLAN);
-    }
-
-    // 5. فحص الليمت بناءً على الداتا السريعة
-    if (tenantInfo.plan === 'FREE' && tenantInfo.count >= FREE_LIMIT) {
+    if (trackedItemsCount >= trackingLimit) {
       throw new HttpException(
         {
           error: 'PLAN_LIMIT_REACHED',
-          message: `Free plan allows a maximum of ${FREE_LIMIT} tracked products.`,
-          upgradeUrl: '/billing/checkout',
-          currentCount: tenantInfo.count,
-          limit: FREE_LIMIT,
+          message: `Your current plan allows a maximum of ${trackingLimit} tracked products.`,
+          currentCount: trackedItemsCount,
+          limit: Number.isFinite(trackingLimit) ? trackingLimit : null,
         },
         HttpStatus.PAYMENT_REQUIRED,
       );
     }
-    // ==========================================
 
-    // ... باقي كود إنشاء المنتج وعمل Upsert زي ما هو في الكود الأصلي بتاعك
     const product = await this.prisma.product.upsert({
       where: { url: dto.url },
       update: {},
       create: { url: dto.url, store, title: dto.url },
     });
 
-    // مهم جداً: بعد ما عملنا Create لـ Item جديد، لازم نمسح كاش اليوزر
-    // عشان الريكويست اللي جاي العدد (count) يتحدث وميبقاش قاري داتا قديمة!
-    await this.cache.invalidateTenantPlan(tenantId); // 👈 6. تدمير الكاش القديم
-
     const trackedItem = await this.prisma.trackedItem.create({
       data: { user_id: userId, product_id: product.id, tenant_id: tenantId },
       include: { product: true },
     });
+
+    await this.referrals.processReferralQualification(userId);
 
     await this.scraperService.enqueueImmediate({
       productId: product.id,
       tenantId,
       store,
       url: dto.url,
-      priority: tenantInfo.plan === 'PRO' ? 1 : 2, // استخدمنا الخطة من الكاش
+      priority: tenant.plan === 'PRO' ? 1 : 2,
     });
 
     return trackedItem;

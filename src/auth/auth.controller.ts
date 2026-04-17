@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req, Res, HttpCode, HttpStatus } from '@nestjs/common';
+import { Controller, Post, Body, Req, Res, HttpCode, HttpStatus, Get } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -7,6 +7,8 @@ import { LoginDto } from '././dto/login.dto';
 import { Public } from '../common/decorators/public.decorator';
 import { Throttle } from '@nestjs/throttler';
 import { extractIp } from '../common/helpers/ip.helper';
+import { ReferralService } from '../referrals/referrals.service';
+import { CurrentUser } from '../common/decorators/current-user.decorator';
 
 const COOKIE_OPTIONS = {
   httpOnly: true,
@@ -18,7 +20,10 @@ const COOKIE_OPTIONS = {
 @ApiTags('auth')
 @Controller('auth')
 export class AuthController {
-  constructor(private auth: AuthService) {}
+  constructor(
+    private auth: AuthService,
+    private referrals: ReferralService,
+  ) {}
 
   @Public()
   @Throttle({ default: { ttl: 60, limit: 10 } })
@@ -27,9 +32,9 @@ export class AuthController {
   @ApiResponse({ status: 201, description: 'Returns access token' })
   async register(@Body() dto: RegisterDto, @Res({ passthrough: true }) res: Response) {
     console.log('Inside Register Controller');
-    const { accessToken, refreshToken } = await this.auth.register(dto);
+    const { accessToken, refreshToken, referralCode } = await this.auth.register(dto);
     res.cookie('refresh_token', refreshToken, COOKIE_OPTIONS);
-    return { accessToken };
+    return { accessToken, referralCode };
   }
 
   @Public()
@@ -44,9 +49,9 @@ export class AuthController {
   ) {
     const ip = extractIp(req);
     const userAgent = req.headers['user-agent'] as string;
-    const { accessToken, refreshToken } = await this.auth.login(dto, ip, userAgent);
+    const { accessToken, refreshToken, referralCode } = await this.auth.login(dto, ip, userAgent);
     res.cookie('refresh_token', refreshToken, COOKIE_OPTIONS);
-    return { message: 'Welcome to your Price Tracker profile!', accessToken };
+    return { message: 'Welcome to your Price Tracker profile!', accessToken, referralCode };
   }
 
   @Public()
@@ -58,9 +63,13 @@ export class AuthController {
     if (!token) throw new Error('No refresh token');
     const ip = extractIp(req);
     const userAgent = req.headers['user-agent'] as string;
-    const { accessToken, refreshToken } = await this.auth.refreshTokens(token, ip, userAgent);
+    const { accessToken, refreshToken, referralCode } = await this.auth.refreshTokens(
+      token,
+      ip,
+      userAgent,
+    );
     res.cookie('refresh_token', refreshToken, COOKIE_OPTIONS);
-    return { accessToken };
+    return { accessToken, referralCode };
   }
 
   @Post('logout')
@@ -71,5 +80,11 @@ export class AuthController {
     if (token) await this.auth.logout(token);
     res.clearCookie('refresh_token');
     return { message: 'Logged out' };
+  }
+
+  @Get('referral-summary')
+  @ApiOperation({ summary: 'Get referral progress and current referral code' })
+  async getReferralSummary(@CurrentUser('id') userId: string) {
+    return this.referrals.getReferralSummary(userId);
   }
 }
