@@ -5,6 +5,8 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { PrismaModule } from '../prisma/prisma.module';
+import { GoogleOauthStrategy } from './strategies/google-oauth.strategy';
+import { GoogleOauthGuard } from './guards/google-oauth.guard';
 @Module({
   imports: [
     PassportModule,
@@ -13,7 +15,12 @@ import { PrismaModule } from '../prisma/prisma.module';
     }),
     PrismaModule,
   ],
-  providers: [AuthService, JwtStrategy],
+  providers: [
+    AuthService,
+    JwtStrategy,
+    GoogleOauthStrategy,
+    GoogleOauthGuard,
+  ],
   controllers: [AuthController],
   exports: [AuthService],
 })

@@ -20,6 +20,8 @@ import { JwtPayload } from '././strategies/jwt-payload.interface';
 import { User, SecurityEventType } from '@prisma/client';
 import { SecurityEventService } from '../security/security-event.service';
 import { ReferralService } from '../referrals/referrals.service';
+import { SOCIAL_EXCHANGE_TTL_SECONDS } from './auth.constants';
+import { SocialAuthRequestUser, SocialProfile } from './auth.types';
 
 const BCRYPT_ROUNDS = 12;
 const MAX_FAILED_ATTEMPTS = 5;
@@ -81,6 +83,87 @@ export class AuthService {
     return this.generateTokens(user);
   }
 
+  async socialAuthFromProfile(profile: SocialProfile, referralCode?: string): Promise<AuthTokens> {
+    const normalizedReferralCode = this.referrals.normalizeReferralCode(referralCode);
+    const referrer = normalizedReferralCode
+      ? await this.referrals.assertValidReferralCode(normalizedReferralCode)
+      : null;
+
+    if (referrer?.email === profile.email) {
+      throw new BadRequestException('You cannot use your own referral code');
+    }
+
+    const user = await this.prisma.$transaction(async (tx) => {
+      const existingByProvider = await tx.user.findFirst({
+        where: { google_id: profile.providerUserId },
+      });
+
+      if (existingByProvider) {
+        return existingByProvider;
+      }
+
+      const existingByEmail = await tx.user.findUnique({
+        where: { email: profile.email },
+      });
+
+      if (existingByEmail) {
+        this.assertSocialEmailCanBeUsed(existingByEmail, profile);
+
+        return tx.user.update({
+          where: { id: existingByEmail.id },
+          data: { google_id: profile.providerUserId },
+        });
+      }
+
+      const tenant = await tx.tenant.create({
+        data: { name: profile.name || profile.email },
+      });
+
+      const referralCode = await this.generateUniqueReferralCode();
+
+      return tx.user.create({
+        data: {
+          email: profile.email,
+          password_hash: null,
+          auth_provider: 'GOOGLE',
+          google_id: profile.providerUserId,
+          referral_code: referralCode,
+          referred_by_user_id: referrer?.id ?? null,
+          tenant_id: tenant.id,
+          role: 'OWNER',
+        },
+      });
+    });
+
+    return this.generateTokens(user);
+  }
+
+  async createSocialExchangeCode(user: SocialAuthRequestUser): Promise<string> {
+    const tokens = await this.socialAuthFromProfile(user, user.referralCode);
+    const code = randomBytes(24).toString('hex');
+
+    await this.redis.set(
+      `social:exchange:${code}`,
+      JSON.stringify(tokens),
+      'EX',
+      SOCIAL_EXCHANGE_TTL_SECONDS,
+    );
+
+    return code;
+  }
+
+  async exchangeSocialCode(code: string): Promise<AuthTokens> {
+    const key = `social:exchange:${code}`;
+    const value = await this.redis.get(key);
+
+    if (!value) {
+      throw new UnauthorizedException('Social login session expired. Please try again.');
+    }
+
+    await this.redis.del(key);
+    return JSON.parse(value) as AuthTokens;
+  }
+
   async login(dto: LoginDto, ip: string, userAgent: string) {
     const user = await this.prisma.user.findUnique({ where: { email: dto.email } });
 
@@ -91,9 +174,15 @@ export class AuthService {
       );
     }
 
-    const valid = user && (await bcrypt.compare(dto.password, user.password_hash));
+    if (user && !user.password_hash) {
+      throw new UnauthorizedException('This account uses Google login. Continue with Google.');
+    }
 
-    if (!valid) {
+    const valid = user?.password_hash
+      ? await bcrypt.compare(dto.password, user.password_hash)
+      : false;
+
+    if (!user || !valid) {
       this.securityEvents.log({
         event_type: SecurityEventType.FAILED_LOGIN,
         user_id: user?.id,
@@ -101,7 +190,7 @@ export class AuthService {
         user_agent: userAgent,
       });
       if (user) {
-        const attempts = await this.incrementFailedAttempts(ip, user.id, userAgent);
+        const attempts = await this.incrementFailedAttempts(ip, user.id);
         if (attempts >= MAX_FAILED_ATTEMPTS) {
           const lockedUntil = new Date(Date.now() + LOCKOUT_MINUTES * 60_000);
           await this.prisma.user.update({
@@ -210,15 +299,12 @@ export class AuthService {
   private async incrementFailedAttempts(
     ip: string,
     userId: string,
-    userAgent: string,
   ): Promise<number> {
     const pipeline = this.redis.pipeline();
     pipeline.incr(`bf:ip:${ip}`);
     pipeline.expire(`bf:ip:${ip}`, LOCKOUT_MINUTES * 60);
     pipeline.incr(`bf:account:${userId}`);
     pipeline.expire(`bf:account:${userId}`, LOCKOUT_MINUTES * 60);
-    pipeline.incr(`bf:user_agent:${userAgent}`);
-    pipeline.expire(`bf:user_agent:${userAgent}`, LOCKOUT_MINUTES * 60);
     const results = await pipeline.exec();
     const ipCount = (results?.[0]?.[1] as number) ?? 0;
     const accCount = (results?.[2]?.[1] as number) ?? 0;
@@ -247,5 +333,23 @@ export class AuthService {
     }
 
     throw new InternalServerErrorException('Unable to generate a unique referral code');
+  }
+
+  private assertSocialEmailCanBeUsed(user: User, _profile: SocialProfile): void {
+    if (user.auth_provider === 'LOCAL') {
+      throw new ConflictException({
+        code: 'EMAIL_ALREADY_REGISTERED_WITH_PASSWORD',
+        message: 'This email already has a password-based account. Sign in with email and password.',
+      });
+    }
+
+    if (user.auth_provider === 'GOOGLE') {
+      return;
+    }
+
+    throw new ConflictException({
+      code: 'EMAIL_ALREADY_REGISTERED_WITH_UNSUPPORTED_PROVIDER',
+      message: 'This email is already registered with an unsupported provider. Contact support to continue.',
+    });
   }
 }
