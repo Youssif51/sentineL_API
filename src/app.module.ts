@@ -31,6 +31,8 @@ import { TrackedItemsModule } from './tracking/tracking.module';
         NODE_ENV: Joi.string().valid('development', 'production', 'test').default('development'),
         PORT: Joi.number().default(3000),
         REDIS_PORT: Joi.number().default(6379),
+        GOOGLE_CLIENT_ID: Joi.string().optional(),
+        GOOGLE_CLIENT_SECRET: Joi.string().optional(),
       }),
     }),
     ScheduleModule.forRoot(),

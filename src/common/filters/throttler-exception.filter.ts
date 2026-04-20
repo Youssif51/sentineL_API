@@ -8,7 +8,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
     const response = host.switchToHttp().getResponse<Response>();
   
     const status = exception.getStatus ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const exceptionResponse =
+      typeof exception?.getResponse === 'function' ? exception.getResponse() : null;
+
     let message = exception.message || 'Internal server error';
+
+    if (typeof exceptionResponse === 'string') {
+      message = exceptionResponse;
+    } else if (exceptionResponse && typeof exceptionResponse === 'object') {
+      const responseMessage = (exceptionResponse as { message?: string | string[] }).message;
+
+      if (Array.isArray(responseMessage) && responseMessage.length > 0) {
+        message = responseMessage[0];
+      } else if (typeof responseMessage === 'string' && responseMessage) {
+        message = responseMessage;
+      }
+    }
 
     if (status === HttpStatus.TOO_MANY_REQUESTS) {
       message = 'to many req wait';
