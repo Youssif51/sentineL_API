@@ -14,7 +14,7 @@ export class ReferralService {
     return referralCode.trim().toUpperCase();
   }
 
-  async assertValidReferralCode(referralCode: string) {
+  async assertValidReferralCode(referralCode: string) {   
     const referrer = await this.prisma.user.findUnique({
       where: { referral_code: referralCode },
       select: {
@@ -52,17 +52,17 @@ export class ReferralService {
       }),
     ]);
 
-    return {
-      referralCode: user.referral_code,
-      successfulReferrals,
-      bonusTrackingSlots: user.tenant.bonus_tracking_slots,
-      baseTrackingLimit: user.tenant.plan === 'PRO' ? null : FREE_TRACKED_ITEMS_LIMIT,
-      totalTrackingLimit:
-        user.tenant.plan === 'PRO'
-          ? null
-          : FREE_TRACKED_ITEMS_LIMIT + user.tenant.bonus_tracking_slots,
-      maxBonusTrackingSlots: MAX_BONUS_TRACKING_SLOTS,
-    };
+      return {
+        referralCode: user.referral_code,
+        successfulReferrals,
+        bonusTrackingSlots: user.tenant.bonus_tracking_slots,
+        baseTrackingLimit: user.tenant.plan === 'PRO' ? null : FREE_TRACKED_ITEMS_LIMIT,
+        totalTrackingLimit:
+          user.tenant.plan === 'PRO'
+            ? null
+            : FREE_TRACKED_ITEMS_LIMIT + user.tenant.bonus_tracking_slots,
+        maxBonusTrackingSlots: MAX_BONUS_TRACKING_SLOTS,
+      };
   }
 
   async processReferralQualification(referredUserId: string): Promise<void> {
