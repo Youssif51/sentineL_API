@@ -69,8 +69,46 @@ export class TrackedItemsService {
   }
 
   async findAll(tenantId: string) {
-    return this.prisma.trackedItem.findMany({
-      where: { tenant_id: tenantId },
+    const [tenant, items] = await Promise.all([
+      this.prisma.tenant.findUniqueOrThrow({
+        where: { id: tenantId },
+        select: { plan: true },
+      }),
+      this.prisma.trackedItem.findMany({
+        where: { tenant_id: tenantId },
+        include: {
+          product: {
+            include: {
+              price_history: { orderBy: { scraped_at: 'desc' }, take: 2 },
+            },
+          },
+        },
+        orderBy: { created_at: 'desc' },
+      }),
+    ]);
+
+    const normalizedItems = items.map((item) => {
+      const [, previousPrice] = item.product.price_history;
+
+      return {
+        ...item,
+        product: {
+          ...item.product,
+          price_history: previousPrice ? [{ price: previousPrice.price }] : [],
+        },
+      };
+    });
+
+    return {
+      items: normalizedItems,
+      plan: tenant.plan,
+      count: normalizedItems.length,
+    };
+  }
+
+  async findByProduct(productId: string, tenantId: string) {
+    const item = await this.prisma.trackedItem.findFirst({
+      where: { tenant_id: tenantId, product_id: productId },
       include: {
         product: {
           include: {
@@ -80,6 +118,17 @@ export class TrackedItemsService {
       },
       orderBy: { created_at: 'desc' },
     });
+
+    if (!item) {
+      throw new NotFoundException('Product not found');
+    }
+
+    const [, previousPrice] = item.product.price_history;
+
+    return {
+      ...item.product,
+      price_history: previousPrice ? [{ price: previousPrice.price }] : [],
+    };
   }
 
   async remove(id: string, tenantId: string): Promise<void> {

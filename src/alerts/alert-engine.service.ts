@@ -26,6 +26,11 @@ export class AlertEngineService {
       include: { tracked_item: { include: { user: true, product: true } } },
     });
 
+    if (rules.length === 0) {
+      this.logger.debug(`Skipping alerts for product ${productId}: no alert rules configured`);
+      return;
+    }
+
     await Promise.allSettled(
       rules.map((rule) => this.evaluate(rule as RuleWithRelations, oldPrice, newPrice)),
     );

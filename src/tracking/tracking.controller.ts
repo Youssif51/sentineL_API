@@ -19,8 +19,17 @@ export class TrackedItemsController {
 
   @Get()
   @ApiOperation({ summary: 'Get all tracked items with latest prices' })
-  findAll(@CurrentUser('tenant_id') tenantId: string) {
-    return this.service.findAll(tenantId);
+  findAll(@CurrentUser() user: User) {
+    return this.service.findAll(user.tenant_id);
+  }
+
+  @Get('by-product/:productId')
+  @ApiOperation({ summary: 'Get one tracked product by product id' })
+  findByProduct(
+    @Param('productId') productId: string,
+    @CurrentUser('tenant_id') tenantId: string,
+  ) {
+    return this.service.findByProduct(productId, tenantId);
   }
 
   @Delete(':id')

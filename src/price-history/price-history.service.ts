@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ScrapedProduct } from '../scraping/adapters/scraper-adapter.interface';
 import { AlertEngineService } from '../alerts/alert-engine.service';
@@ -68,5 +68,37 @@ export class PriceHistoryService {
 
     await this.cache.set(this.cache.getChartKey(productId, days), data, this.cache.ttl.CHART_DATA);
     return data;
+  }
+
+  async getTrackedItemChartData(trackedItemId: string, tenantId: string, days = 30) {
+    const trackedItem = await this.prisma.trackedItem.findFirst({
+      where: { id: trackedItemId, tenant_id: tenantId },
+      include: {
+        product: {
+          select: {
+            id: true,
+            title: true,
+            store: true,
+            url: true,
+            last_price: true,
+            in_stock: true,
+            last_scraped_at: true,
+          },
+        },
+      },
+    });
+
+    if (!trackedItem) {
+      throw new NotFoundException('Tracked item not found');
+    }
+
+    const chart = await this.getChartData(trackedItem.product_id, days);
+
+    return {
+      trackedItemId: trackedItem.id,
+      product: trackedItem.product,
+      rangeDays: days,
+      points: chart,
+    };
   }
 }
