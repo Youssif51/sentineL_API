@@ -27,7 +27,10 @@ export class ElbadrAdapter extends BaseScraper {
     const title =
       $('.page-title-text').first().text().trim() || $('h1.page-title').first().text().trim();
 
-    const priceText = $('.product-price').first().text().trim();
+    const priceText =
+      $('.product-price-new').first().text().trim() ||
+      $('.product-price').first().text().trim() ||
+      $('.price-group').first().text().trim();
     const price = this.parseEgpPrice(priceText);
 
     const inStock = $('.product-stock.in-stock').length > 0 || $('.in-stock').length > 0;
