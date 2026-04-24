@@ -27,6 +27,8 @@ const BCRYPT_ROUNDS = 12;
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
 const REFERRAL_CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+const REFRESH_REUSE_RESULT_TTL_SECONDS = 15;
+const REFRESH_ROTATION_LOCK_TTL_SECONDS = 5;
 
 interface AuthTokens {
   accessToken: string;
@@ -236,6 +238,29 @@ export class AuthService {
     }
 
     const tokenHash = this.hashToken(oldRefreshToken);
+    const reuseResultKey = `rt:result:${tokenHash}`;
+    const lockKey = `rt:lock:${tokenHash}`;
+
+    const reusableResult = await this.getReusableRefreshResult(reuseResultKey);
+    if (reusableResult) {
+      return reusableResult;
+    }
+
+    const lockAcquired = await this.redis.set(
+      lockKey,
+      '1',
+      'EX',
+      REFRESH_ROTATION_LOCK_TTL_SECONDS,
+      'NX',
+    );
+
+    if (!lockAcquired) {
+      const pendingResult = await this.waitForRefreshResult(reuseResultKey);
+      if (pendingResult) {
+        return pendingResult;
+      }
+    }
+
     const blacklisted = await this.redis.get(`rt:blacklist:${tokenHash}`);
     if (blacklisted) {
       this.securityEvents.log({
@@ -253,13 +278,25 @@ export class AuthService {
       throw new UnauthorizedException('Token reuse detected - all sessions invalidated');
     }
 
-    const ttl = (payload.exp ?? 0) - Math.floor(Date.now() / 1000);
-    await this.redis.set(`rt:blacklist:${tokenHash}`, '1', 'EX', Math.max(ttl, 1));
+    try {
+      const ttl = (payload.exp ?? 0) - Math.floor(Date.now() / 1000);
+      await this.redis.set(`rt:blacklist:${tokenHash}`, '1', 'EX', Math.max(ttl, 1));
 
-    const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
-    if (!user) throw new UnauthorizedException();
+      const user = await this.prisma.user.findUnique({ where: { id: payload.sub } });
+      if (!user) throw new UnauthorizedException();
 
-    return this.generateTokens(user);
+      const tokens = this.generateTokens(user);
+      await this.redis.set(
+        reuseResultKey,
+        JSON.stringify(tokens),
+        'EX',
+        REFRESH_REUSE_RESULT_TTL_SECONDS,
+      );
+
+      return tokens;
+    } finally {
+      await this.redis.del(lockKey);
+    }
   }
 
   async logout(refreshToken: string): Promise<void> {
@@ -294,6 +331,27 @@ export class AuthService {
 
   hashToken(token: string): string {
     return createHash('sha256').update(token).digest('hex');
+  }
+
+  private async getReusableRefreshResult(key: string): Promise<AuthTokens | null> {
+    const cached = await this.redis.get(key);
+    return cached ? (JSON.parse(cached) as AuthTokens) : null;
+  }
+
+  private async waitForRefreshResult(key: string): Promise<AuthTokens | null> {
+    for (let attempt = 0; attempt < 10; attempt += 1) {
+      await this.delay(100);
+      const cached = await this.getReusableRefreshResult(key);
+      if (cached) {
+        return cached;
+      }
+    }
+
+    return null;
+  }
+
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   private async incrementFailedAttempts(

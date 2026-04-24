@@ -1,4 +1,5 @@
 import { Controller, Post, Body, Req, Res, HttpCode, HttpStatus, Get, UseGuards } from '@nestjs/common';
+import { UnauthorizedException } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { Request, Response } from 'express';
 import { AuthService } from './auth.service';
@@ -88,7 +89,7 @@ export class AuthController {
   @ApiOperation({ summary: 'Rotate refresh token' })
   async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const token = req.cookies?.refresh_token as string | undefined;
-    if (!token) throw new Error('No refresh token');
+    if (!token) throw new UnauthorizedException('No refresh token');
     const ip = extractIp(req);
     const userAgent = req.headers['user-agent'] as string;
     const { accessToken, refreshToken, referralCode } = await this.auth.refreshTokens(
