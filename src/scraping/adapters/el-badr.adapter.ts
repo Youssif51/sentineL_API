@@ -44,8 +44,8 @@ export class ElbadrAdapter extends BaseScraper {
 
   async isHealthy(): Promise<boolean> {
     try {
-      const { data } = await this.http.get<string>(this.healthCheckUrl);
-      return data.length > 1000;
+      const result = await this.scrapeWithProtection(this.healthCheckUrl);
+      return Boolean(result.title) && Number.isFinite(result.price);
     } catch {
       return false;
     }
