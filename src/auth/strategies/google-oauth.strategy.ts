@@ -11,7 +11,7 @@ export class GoogleOauthStrategy extends PassportStrategy(Strategy, 'google') {
     super({
       clientID: config.get<string>('GOOGLE_CLIENT_ID') ?? '',
       clientSecret: config.get<string>('GOOGLE_CLIENT_SECRET') ?? 'unused',
-      callbackURL: `${config.get<string>('API_PUBLIC_URL') ?? 'http://localhost:3001'}/auth/google/callback`,
+      callbackURL: `${config.get<string>('API_PUBLIC_URL') ?? 'https://sentinel-api-qh4y.onrender.com'}/auth/google/callback`,
       scope: ['email', 'profile'],
       passReqToCallback: true,
     });
@@ -27,7 +27,10 @@ export class GoogleOauthStrategy extends PassportStrategy(Strategy, 'google') {
     const email = profile.emails?.[0]?.value?.toLowerCase();
 
     if (!email || !profile.id) {
-      return done(new UnauthorizedException('Google account is missing required profile data'), false);
+      return done(
+        new UnauthorizedException('Google account is missing required profile data'),
+        false,
+      );
     }
 
     let referralCode: string | undefined;
