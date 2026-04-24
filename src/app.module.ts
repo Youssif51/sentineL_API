@@ -42,6 +42,7 @@ import { TrackedItemsModule } from './tracking/tracking.module';
           host: process.env.REDIS_HOST,
           port: parseInt(process.env.REDIS_PORT ?? '6379'),
           password: process.env.REDIS_PASSWORD ?? 'password',
+          tls: process.env.REDIS_HOST === 'localhost' ? undefined : {},
         },
         defaultJobOptions: {
           attempts: 4,
@@ -69,6 +70,7 @@ import { TrackedItemsModule } from './tracking/tracking.module';
           host: config.get('REDIS_HOST'),
           port: config.get<number>('REDIS_PORT'),
           password: config.get<string>('REDIS_PASSWORD'),
+          tls: config.get<string>('REDIS_HOST') === 'localhost' ? undefined : {},
         }),
       }),
     }),

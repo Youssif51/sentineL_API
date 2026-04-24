@@ -16,6 +16,7 @@ export const REDIS_CLIENT = 'REDIS_CLIENT';
           port: config.get<number>('REDIS_PORT'),
           password: config.get<string>('REDIS_PASSWORD'),
           lazyConnect: false,
+          tls: config.get<string>('REDIS_HOST') === 'localhost' ? undefined : {},
         }),
     },
   ],
