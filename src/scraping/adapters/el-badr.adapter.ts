@@ -21,7 +21,23 @@ export class ElbadrAdapter extends BaseScraper {
     headers: Record<string, string>,
     proxy: AxiosProxyConfig,
   ): Promise<ScrapedProduct> {
-    const { data } = await this.http.get<string>(url, { headers, proxy });
+    const { data } = await this.http.get<string>(url, {
+      headers: {
+        ...headers,
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Cache-Control': 'no-cache',
+        Pragma: 'no-cache',
+        Referer: 'https://www.google.com/',
+        'Upgrade-Insecure-Requests': '1',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'cross-site',
+        'Sec-Fetch-User': '?1',
+      },
+      proxy,
+    });
     const $ = cheerio.load(data);
 
     const title =
