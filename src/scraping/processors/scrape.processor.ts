@@ -1,4 +1,4 @@
-import { Processor, WorkerHost } from '@nestjs/bullmq';
+import { OnWorkerEvent, Processor, WorkerHost } from '@nestjs/bullmq';
 import { Logger } from '@nestjs/common';
 import { Job } from 'bullmq';
 import { SCRAPE_QUEUE } from '../../queue/queue.constants';
@@ -18,7 +18,7 @@ export class ScrapeProcessor extends WorkerHost {
 
   async process(job: Job<ScrapeJobData>): Promise<void> {
     const { productId, store, url } = job.data;
-    this.logger.log(`Processing scrape job — store: ${store}, product: ${productId}`);
+    this.logger.log(`Processing scrape job - store: ${store}, product: ${productId}`);
 
     const adapter = this.registry.resolve(url);
 
@@ -27,5 +27,12 @@ export class ScrapeProcessor extends WorkerHost {
     this.logger.log(`Scraped ${store}: ${result.price} EGP | inStock: ${result.inStock}`);
 
     await this.priceHistory.record(productId, result);
+  }
+
+  @OnWorkerEvent('failed')
+  onFailed(job: Job<ScrapeJobData>, error: Error) {
+    this.logger.error(
+      `Scrape job ${job?.id ?? 'unknown'} failed for ${job?.data?.url ?? 'unknown url'}: ${error.message}`,
+    );
   }
 }
